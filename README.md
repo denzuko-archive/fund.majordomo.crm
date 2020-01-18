@@ -23,6 +23,7 @@ Key | Description
 -|-
 DOMAINNAME | Top level domain name (defaults: testnet.dapla.net)
 TZ | Timezone control (defaults: Etc/UTC)
+ENVIRONMENT | release environment (defaults: N/A, <production | development | staging>)
 
 ## Usage
 
