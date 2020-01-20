@@ -54,10 +54,7 @@
       "plan": "heroku-redis:hobby-dev"
     },
     {
-      "plan": "heroku-postgresql:hobby-dev",
-      "options": {
-        "version": "9.5"
-      }
+      "plan": "heroku-postgresql:hobby-dev"
     }
   ],
   "buildpacks": [
