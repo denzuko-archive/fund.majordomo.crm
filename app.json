@@ -1,0 +1,71 @@
+{
+  "name": "odoo crm",
+  "description": "CRM, business intel, sales and marketing platform as a service.",
+  "keywords": [
+    "crm",
+    "dynamic",
+    "sales",
+    "marketing"
+  ],
+  "website": "https://majordomo.fund/",
+  "repository": "https://github.com/denzuko/fund.majordomo.crm",
+  "logo": "https://toppng.com/show_download/213193/download-svg-or-png-odoo-gold-partner/large",
+  "success_url": "/web/login",
+  "scripts": {},
+  "env": {
+    "SECRET_TOKEN": {
+      "description": "A secret key for verifying the integrity of signed cookies.",
+      "generator": "secret"
+    },
+    "WEB_CONCURRENCY": {
+      "description": "The number of processes to run.",
+      "value": "5"
+    },
+    "AWS_ACCESS_KEY_ID": {
+      "descriptin": "S3 bucket access key",
+      "value": ""
+     },
+     "AWS_SECRET_ACCESS_KEY": {
+      "description": "S3 bucket secret key",
+      "value": ""
+     },
+     "AWS_REGION": {
+      "description": "AWS Region",
+      "value": ""
+     },
+     "S3_BUCKET": {
+      "description": "S3 bucket name for backups",
+      "value": ""
+     }
+  },
+  "formation": {
+    "web": {
+      "quantity": 2,
+      "size": "Performance-M"
+    }
+  },
+  "image": "heroku/python",
+  "addons": [
+    {
+      "plan": "heroku-redis:hobby-dev"
+    },
+    {
+      "plan": "heroku-postgresql:hobby-basic",
+      "options": {
+        "version": "9.5"
+      }
+    }
+  ],
+  "buildpacks": [
+    {
+      "url": "https://github.com/odooku/odooku-buildpack.git#10.0"
+    }
+  ],
+  "environments": {
+    "test": {
+      "scripts": {
+        "test": "exit 0"
+      }
+    }
+  }
+}
