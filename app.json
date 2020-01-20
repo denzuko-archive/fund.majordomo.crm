@@ -19,23 +19,27 @@
     },
     "WEB_CONCURRENCY": {
       "description": "The number of processes to run.",
-      "value": "5"
+      "value": "1"
     },
     "AWS_ACCESS_KEY_ID": {
       "descriptin": "S3 bucket access key",
-      "value": ""
+      "value": "",
+      "required": false
      },
      "AWS_SECRET_ACCESS_KEY": {
       "description": "S3 bucket secret key",
-      "value": ""
+      "value": "",
+      "required": false
      },
      "AWS_REGION": {
       "description": "AWS Region",
-      "value": ""
+      "value": "",
+      "required": false
      },
      "S3_BUCKET": {
       "description": "S3 bucket name for backups",
-      "value": ""
+      "value": "",
+      "required": false
      }
   },
   "formation": {
