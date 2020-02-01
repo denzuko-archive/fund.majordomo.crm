@@ -1,0 +1,398 @@
+---
+version: "3.7"
+
+## DSL Config
+x-influxlog: &syslog
+  logging:
+    driver: syslog
+    options:
+      #syslog-address: "udp://{{.Node.Hostname}}:6154"
+      #syslog-address: "udp://{{.Swarm.NodeAddr}}:6154"
+      syslog-address: "udp://127.0.0.1:6154"
+      syslog-format: rfc5424micro
+      tag: "{{.ImageName}}/{{.Name}}/{{.ID}}"
+
+x-replicas: &replicated
+  replicas: 1
+
+x-global: &global
+  mode: global
+
+x-worker: &worker
+  placement:
+    constraints: [node.role == worker]
+
+x-manager: &manager
+  placement:
+    constraints: [node.role == manager]
+
+x-restart: &on-failure
+  restart_policy:
+    condition: on-failure
+    max_attempts: 3
+    delay: 5s
+
+  rollback_config:
+    parallelism: 2
+    delay: 10s
+    monitor: 10s
+    order: start-first
+    failure_action: continue
+
+  update_config:
+    parallelism: 2
+    delay: 10s
+    monitor: 10s
+    order: start-first
+    failure_action: rollback
+
+x-stop-grace: &stopperiod
+  stop_grace_period: 30s
+
+x-default-healthcheck: &heathcheck-pass
+  test: ["CMD", "exit 0"]
+  interval: 25s
+  timeout: 5s
+  retries: 3
+
+x-traefik-off: &traefik-off
+  traefik.enabled: "false"
+
+x-traefik-on: &traefik-on
+  traefik.enabled: "true"
+  traefik.frontend.errors.network.backend: "error"                                                                                                                                                                     
+  traefik.frontend.errors.network.query: "/"                                                                                                                                                                             
+  traefik.frontend.errors.network.status: "404,500-511"
+  traefik.frontned.entrypoints: 'http,https,ws,wss'
+  traefik.frontend.priority: "5"
+  traefik.port: "80"
+
+x-default-route: &default-route
+  <<: *traefik-on
+  traefik.frontend.rule: "HostRegexp:{catchall:.*}"
+  traefik.frontend.priority: "1"
+#<<: *traefik-default-frontend
+
+x-vhost-route: &vhost-route
+  <<: *traefik-on
+  traefik.frontend.priority: "10"
+
+
+x-orbiter-disable: &orbiter-off
+  orbiter: "false"
+  <<: *traefik-off
+
+x-orbiter-enable: &orbiter-on
+  orbiter: "true"
+  orbiter.up: "3"
+  orbiter.down: "1"
+  <<: *traefik-on
+
+configs:
+
+  telegraf.conf:
+    file: ./config/telegraf.conf
+    name: telegraf.conf-${RELEASE_VERSION}
+
+  kapacitor.conf:
+    file: ./config/kapacitor.conf
+    name: kapacitor.conf-${RELEASE_VERSION}
+
+  haasio.yml:
+    file: ./config/haasio.yml
+    name: haasio.yml-${RELEASE_VERSION}
+
+
+volumes:
+
+  mqtt-data: {}
+  chronograf-data: {}
+  kapacitor-data: {}
+  influxdb-data: {}
+  portainer_data: {}
+
+
+networks:
+
+  internal:
+    external: true
+    name: internal
+
+  default:
+    external: true
+    name: ${DEFAULT_NETWORK}
+
+services:
+
+  influxdb:
+    ports:
+      - "8086/tcp"
+    networks:
+      - internal
+    image: influxdb:latest
+    deploy:
+      <<: *replicated
+      <<: *on-failure
+      <<: *manager
+      labels:
+        <<: *orbiter-on
+        traefik.frontend.rule: "Host:influx.${DOMAINNAME}"
+        traefik.frontend.port: "8086"
+
+
+  broker:
+    image: matteocollina/mosca:latest
+    ports:
+      - "1883:1883"
+      - "80/tcp"
+    deploy:
+      <<: *replicated
+      <<: *on-failure
+      labels:
+        <<: *orbiter-on
+        traefik.port: "80"
+        traefik.frontend.rule: "Host:broker.${DOMAINNAME}"
+    volumes:
+      - mqtt-data:/db
+    networks:
+      - default
+    depends_on:
+      - influxdb
+
+  telegraf:
+    image: telegraf:latest
+    hostname: "{{.Node.ID}}"
+    configs:
+      - source: telegraf.conf
+        target: /etc/telegraf/telegraf.conf
+    ports:
+      - "6514:6514/tcp"
+      - "6514:6514/udp"
+    deploy:
+      <<: *global
+      <<: *on-failure
+      labels:
+        <<: *orbiter-off
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /:/hostfs:ro
+    environment:
+      HOST_MOUNT_PREFIX: "/hostfs"
+      HOST_MOUNT_PROC: "/hostfs/proc"
+      DOCKER_HOST: "unix:///var/run/docker.sock"
+    networks:
+      internal:
+        aliases:
+          - telegraf
+    depends_on:
+      - influxdb
+
+  kapacitor:
+    image: kapacitor:latest
+    hostname: "{{.Node.ID}}"
+    configs:
+      - source: kapacitor.conf
+        target: /etc/kapacitor/kapacitor.conf
+    deploy:
+      <<: *manager
+      <<: *replicated
+      <<: *on-failure
+      labels:
+        <<: *orbiter-off
+    volumes:
+      - kapacitor-data:/var/lib/kapacitor
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      # The API for Kapacitor is served on port 9092
+      - "9092/tcp"
+    networks:
+      - internal
+    depends_on:
+      - influxdb
+
+  shepherd:
+    image: 'mazzolino/shepherd'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # /root/.docker/config.json:/root/.docker/config.json:ro
+    environment:
+      SLEEP_TIME: "5m"
+      BLACKLIST_SERVICES: "shepherd autoscale traefik agent"
+      WITH_REGISTRY_AUTH: "true"
+      DOCKER_HOST: "unix:///var/run/docker.sock"
+    deploy:
+      <<: *on-failure
+      <<: *global
+      <<: *manager
+      labels:
+        <<: *orbiter-off
+
+  autoscale:
+    image: gianarb/orbiter:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      <<: *manager
+      <<: *global
+      <<: *on-failure
+      labels:
+        <<: *orbiter-off
+        <<: *vhost-route
+        traefik.port: "8000"
+        traefik.frontend.rule: "Host:autoscale.${DOMAINNAME}"
+    ports:
+      - '8000/tcp'
+
+  adminagent:
+    image: portainer/agent:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - target: 9001
+        published: 9001
+        protocol: tcp
+        mode: host
+    environment:
+      AGENT_CLUSTER_ADDR: tasks.adminagent
+    networks:
+      - internal
+    deploy:
+      <<: *global
+      <<: *manager
+      <<: *on-failure
+      labels:
+        orbiter: "false"
+        traefik.enable: "false"
+
+# TODO: acme && cloudflair
+  loadbalancer:
+    image: traefik:1.7
+    command: |
+      --docker
+      --docker.useBindPortIP=true
+      --docker.swarmmode
+      --docker.watch
+      --docker.domain=${DOMAINNAME}
+      --docker.network=${DEFAULT_NETWORK}
+      --docker.exposedbydefault=true
+      --logLevel=DEBUG
+      --entryPoints="Name:http Address::80 Redirect.EntryPoint:https"
+      --entryPoints="Name:https Address::443 TLS" #Redirect.EntryPoint:https
+      --defaultentrypoints="http,https,ws,wss"
+      --api
+      --api.entryPoint=traefik
+      --api.dashboard=true
+      --accesslog
+      --ping
+      --ping.entrypoint=http
+      --web.metrics.influxdb=true
+      --web.metrics.influxdb.address=influxdb:8086
+      --web.metrics.influxdb.database=telegraf
+      --web.metrics.influxdb.protocol=http
+      --tracing
+      --tracing.backend=zipkin
+      --tracing.spanNameLimit=265
+    deploy:
+      <<: *manager
+      <<: *replicated
+      <<: *on-failure
+      labels:
+        <<: *vhost-route
+        <<: *orbiter-off
+        traefik.port: "8080"
+        traefik.frontend.rule: "Host:loadbalancer.${DOMAINNAME}"
+    ports:
+      - "80:80/tcp"
+      - "443:443/tcp"
+      - "8080/tcp"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /dev/null:/traefik.toml
+    networks:
+      - default
+      - internal
+    depends_on:
+      - influxdb
+      - telegraf
+
+  admin:
+    image: 'portainer/portainer:latest'
+    ports:
+      - '9000/tcp'
+    networks:
+      - default
+      - internal
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    depends_on:
+      - agent
+      - telegraf
+    command: |
+      -H "tcp://tasks.adminagent:9001"
+      --tlsskipverify
+      --no-auth
+      --no-analytics
+      --logo "https://dms-discourse-static.s3.amazonaws.com/original/3X/4/8/482ecb2309ea9a1892d570a6b4da6a77e84da941.png"
+    deploy:
+      <<: *replicated
+      <<: *on-failure
+      labels:
+        <<: *default-route
+        <<: *orbiter-on
+        traefik.frontend.priority: 3
+        traefik.port: "9000"
+
+  monitoring:
+    image: chronograf:latest
+    deploy:
+      <<: *replicated
+      <<: *on-failure
+      labels:
+        <<: *vhost-route
+        <<: *orbiter-on
+        traefik.port: "8888"
+        traefik.frontend.rule: "Host:monitoring.${DOMAINNAME}"
+    ports:
+      - '8888/tcp'
+    volumes:
+      - chronograf-data:/var/lib/chronograf
+    networks:
+      - internal
+      - default
+    depends_on:
+      - influxdb
+      - kapacitor
+      - telegraf
+    command: --influxdb-url=http://influxdb:8086 --kapacitor-url=http://kapacitor:9092
+
+  errorpage:
+    image: 'guillaumebriday/traefik-custom-error-pages:latest'
+    ports:
+      - '80/tcp'
+    networks:
+      - default
+    deploy:
+      <<: *replicated
+      <<: *on-failure
+      labels:
+        <<: *orbiter-on
+        <<: *default-route
+        traefik.backend: "error"
+
+  systemprune:
+    deploy:
+      <<: *global
+      restart_policy:
+        condition: any
+        delay: 72h
+      <<: *on-failure
+      labels:
+        <<: *orbiter-off
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    image: docker:dind
+    command: system prune -af --filter "until=24h" --filter="label!=net.matrix.application==infrastructure"
+      
+...
+# vim: set sts=2 sw=2 ts=2 et ai:

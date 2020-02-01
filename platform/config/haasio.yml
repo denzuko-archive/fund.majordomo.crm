@@ -1,0 +1,65 @@
+---
+homeassistant:
+    name: haasio
+    time_zone: UTC
+    auth_providers:
+        - type: homeassistant
+
+        - type: legacy_api_password
+          api_password: !env_var HASSIO_PASSWORD SuperSecretSquad
+
+        - type: trusted_networks
+          allow_bypass_login: true
+          trusted_networks:
+            - 0.0.0.0/0
+
+config:
+
+api:
+
+frontend:
+
+http:
+    #cors_allowed_origins:
+    #- '*'
+    #ip_ban_enabled: False
+    #login_attempts_threshold: 5
+
+updater:
+
+#discover:
+
+#hassio:
+
+conversation:
+
+history:
+
+logbook:
+
+logger:
+    default: info
+
+map:
+
+mqtt:
+  broker: broker.testnet.dapla.net
+  username: yourusername
+  password: yourpassword
+
+switch:
+
+- platform: rest
+#resource: http://172.17.0.1/api/endpoints/1/docker/container/grafana
+resource: http://172.18.0.1:8000/v1/orbiter/health
+name: Docker
+body_on: '{"status":true,"info":{}}'
+body_off: '{"state": "stop"}'
+is_on_template: '{{ value_json is not none and value_json.status }}'
+
+
+device_tracker:
+    - platform: nmap_tracker
+      hosts: 172.18.0.0/16
+
+...

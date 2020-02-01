@@ -1,0 +1,102 @@
+## warning: host level directives. deploy with docker-compose up -d
+version: '3.7'
+
+## DSL Config
+x-influxlog: &syslog
+  logging:
+    driver: syslog
+    options:
+      #syslog-address: "udp://{{.Node.Hostname}}:6154"
+      #syslog-address: "udp://{{.Swarm.NodeAddr}}:6154"
+      syslog-address: "udp://127.0.0.1:6154"
+      syslog-format: rfc5424micro
+      tag: "{{.ImageName}}/{{.Name}}/{{.ID}}"
+
+x-replicas: &replicated
+  replicas: 1
+
+x-global: &global
+  mode: global
+
+x-worker: &worker
+  placement:
+    constraints: [node.role == worker]
+
+x-manager: &manager
+  placement:
+    constraints: [node.role == manager]
+
+x-restart: &on-failure
+  restart_policy:
+    condition: on-failure
+    max_attempts: 3
+    delay: 5s
+
+  rollback_config:
+    parallelism: 2
+    delay: 10s
+    monitor: 10s
+    order: start-first
+    failure_action: continue
+
+  update_config:
+    parallelism: 2
+    delay: 10s
+    monitor: 10s
+    order: start-first
+    failure_action: rollback
+
+x-stop-grace: &stopperiod
+  stop_grace_period: 30s
+
+x-default-healthcheck: &heathcheck-pass
+  test: ["CMD", "exit 0"]
+  interval: 25s
+  timeout: 5s
+  retries: 3
+
+x-traefik-off: &traefik-off
+  traefik.enabled: "false"
+
+x-orbiter-disable: &orbiter-off
+  orbiter: "false"
+  <<: *traefik-off
+
+x-orbiter-enable: &orbiter-on
+  orbiter: "true"
+  orbiter.up: "3"
+  orbiter.down: "1"
+
+x-flags: &common
+  environment:
+    TZ: "${TZ:-Etc/UTC}"
+    HOSTNAME: "${HOSTNAME}"
+    DOMAIN: "${DOMAIN:-local}"
+  tty: true
+  stdin_open: true
+  privileged: true
+  network_mode: host
+  volumes:
+    - /var/run/docker.sock:/host/var/run/docker.sock
+    - /dev:/host/dev
+    - /proc:/host/proc:ro
+    - /boot:/host/boot:ro
+    - /lib/modules:/host/lib/modules:ro
+    - /usr:/host/usr:ro
+  deploy:
+    <<: *global
+    <<: *on-failure
+    labels:
+      <<: *traefik-off
+      <<: *orbiter-on
+
+services:
+  falco:
+    image: falcosecurity/falco:latest
+    <<: *common
+
+  sysdig:
+    image: sysdig/sysdig:latest
+    <<: *common
+
+## sematext / tick
