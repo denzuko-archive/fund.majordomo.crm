@@ -1,6 +1,7 @@
 odooku-odoo-addons
 odooku
 
+pip>=19.2 # not directly required, pinned by Snyk to avoid a vulnerability
 gevent>=1.2a1 # not directly required, pinned by Snyk to avoid a vulnerability
 jinja2>=2.10.1 # not directly required, pinned by Snyk to avoid a vulnerability
 lxml>=4.2.5 # not directly required, pinned by Snyk to avoid a vulnerability
