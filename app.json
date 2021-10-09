@@ -57,10 +57,12 @@
       "plan": "heroku-postgresql:hobby-dev"
     }
   ],
+  "stack": "heroku-20",
   "buildpacks": [
-    {
-      "url": "https://github.com/odooku/odooku-buildpack.git#11.0"
-    }
+    { "url": "https://github.com/odooku/odooku-buildpack.git#11.0" },
+    { "url": "https://github.com/Daplanet/xelatex-buildpack" },
+    { "url": "heroku/python" },
+    { "url": "heroku/nodejs" }
   ],
   "environments": {
     "test": {
