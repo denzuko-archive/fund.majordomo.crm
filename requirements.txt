@@ -57,4 +57,4 @@ pypiwin32 ; sys_platform == 'win32'
 pyopenssl==19.0.0
 #odooku-odoo-addons
 odooku==11.0.14
-git+https://github.com/odoo/odoo==15.0
+git+https://github.com/odoo/odoo@15.0
